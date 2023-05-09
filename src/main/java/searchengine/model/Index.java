@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import javax.persistence.*;
-import java.security.PrivateKey;
 
 @Entity
 @Getter
@@ -22,12 +21,13 @@ public class Index {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "page_id")
     private Page page;
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lemma_id")
     private Lemma lemma;
+    @Column(name = "rank_index")
     private Float rank;
 
     public Index(Page page, Lemma lemma, Float rank) {

@@ -8,39 +8,85 @@ import searchengine.model.Site;
 import searchengine.repositories.LemmaRepository;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
 
 public abstract class LemmaDataService {
 
-    public synchronized static void deleteBySite(Site site) {
-        RepositoryCollector.getLemmaRepository().deleteBySite(site);
+    private static LemmaRepository getRepository() {
+        return RepositoryCollector.getLemmaRepository();
     }
 
-    public static HashMap<Lemma, Integer> saveLemmas(HashMap<String, Integer> words, Site site) {
+    public static long getCountBySite(Site site) {
+        return getRepository().countBySite(site);
+    }
+
+    public static void deleteBySite(Site site) {
+        synchronized (site) {
+            getRepository().deleteBySite(site);
+        }
+    }
+
+    public static List<Lemma> getAllLemma(Collection<String> words) {
+        return getRepository().findByLemmaInOrderByFrequencyAsc(words);
+    }
+
+    public static List<Lemma> getAllLemma(Collection<String> words, String sitePath) {
+        return getRepository().findByLemmaInAndSite_UrlIgnoreCaseOrderByFrequencyAsc(words, sitePath);
+    }
+
+    public static List<Lemma> getAlLLemmaExcludingFrequent(Collection<String> words, String sitePath) {
+        List<Lemma> lemmaList = sitePath.equals("all") ? getAllLemma(words) : getAllLemma(words, sitePath);
+        return clearManyFrequent(lemmaList);
+    }
+
+    public static HashMap<Lemma, Integer> saveAllLemma(HashMap<String, Integer> words, Site site) {
+
+        HashMap<String, Lemma> toSave = new HashMap<>();
         HashMap<Lemma, Integer> lemmaList = new HashMap<>();
+
         if (words.isEmpty()) {
             return lemmaList;
         }
-        for (String word : words.keySet()) {
-            int count = words.get(word);
-            lemmaList.put(updateOrSaveLemma(site, word, count), count);
+
+        synchronized (site) {
+
+            List<Lemma> lemmasToBD = getRepository().findBySiteAndLemmaIn(site, words.keySet());
+            lemmasToBD.forEach(l -> toSave.put(l.getLemma(), l));
+
+            for (String word : words.keySet()) {
+                Lemma lemma = createOrUpdateLemmaFrequency(toSave, word, site);
+                lemmaList.put(lemma, words.get(word));
+            }
         }
+
+        getRepository().saveAll(toSave.values());
         return lemmaList;
     }
 
-    public synchronized static Lemma updateOrSaveLemma(Site site, String word, Integer count) {
-        LemmaRepository repository = RepositoryCollector.getLemmaRepository();
-        Optional<Lemma> optional = repository.findBySiteAndLemma(site, word);
-        Lemma lemma = null;
-        if (optional.isPresent()) {
-            lemma = optional.get();
-            repository.updateFrequencyById(count + lemma.getFrequency(), lemma.getId());
+    private static Lemma createOrUpdateLemmaFrequency(HashMap<String, Lemma> toSave, String word, Site site) {
+        Lemma lemma = toSave.get(word);
+        if (lemma == null) {
+            lemma = new Lemma(site, word, 1);
+            toSave.put(word, lemma);
         } else {
-            lemma = new Lemma(site, word, count);
-            repository.save(lemma);
+            lemma.setFrequency(lemma.getFrequency() + 1);
         }
         return lemma;
+    }
+
+    private static List<Lemma> clearManyFrequent(List<Lemma> lemmaList) {
+        float count = PageDataService.getCount();
+        List<Lemma> newLemmaList = new ArrayList<>();
+
+        for (Lemma lemma : lemmaList) {
+            if (lemma.getFrequency() / count < 0.7) {
+                newLemmaList.add(lemma);
+            } else {
+                System.out.println("Remove: " + lemma.getLemma());
+            }
+        }
+        return newLemmaList;
     }
 }

@@ -4,21 +4,16 @@ package searchengine.services;    /*
 
 import lombok.Getter;
 import lombok.Setter;
-import searchengine.dto.RepositoryCollector;
 import searchengine.dto.index.HTTPResponse;
 import searchengine.dto.index.PageServiceResponse;
 import searchengine.model.Page;
 import searchengine.model.Site;
-import searchengine.repositories.LemmaRepository;
-import searchengine.repositories.PageRepository;
-import searchengine.services.dataservice.LemmaDataService;
+import searchengine.services.dataservice.PageDataService;
 
-import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
-
-import static java.lang.Thread.sleep;
 
 @Getter
 @Setter
@@ -27,52 +22,57 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
     private static boolean stop;
     private Site site;
     private Page page;
+    private long start;
+    private static long count;
+    private long number;
 
     public SiteParser(Page page) {
         this.page = page;
         this.site = page.getSite();
+        init();
     }
 
     public SiteParser(Site site) {
         this.page = new Page(site);
         this.site = site;
+        WebSiteService.initCache(site);
+        PageDataService.save(page);
+        init();
+    }
+
+    private void init() {
+        start = System.currentTimeMillis();
+        number = count++;
     }
 
     @Override
     protected HTTPResponse compute() {
 
-        PageRepository pageRepository = RepositoryCollector.getPageRepository();
-
         if (stop) {
-           return new HTTPResponse(false, "Индексация остановлена пользователем");
-        }
-        if (pageRepository.findBySiteAndPathIgnoreCase(site, page.getPath()).isPresent()) {
-            return null;
+            return new HTTPResponse(false, "Индексация остановлена пользователем");
         }
 
-        pageRepository.save(page);
-        PageServiceResponse response = PageService.getPage(page);
+        WebSiteService.delUrlByCache(page);
+        PageServiceResponse response = WebSiteService.getPage(page);
+        PageDataService.update(response.getPage());
 
         if (response.isResult()) {
-            HashMap<String, Integer> words = ExtractText.getWords(response.getPage().getContent());
-            LemmaDataService.saveLemmas(words, site);
-            Set<String> refList = PageService.getRef(response.getDocument(), PageService.getDomainRegex(site));
-            startJoin(refList);
+            List<Page> pages = WebSiteService.getPages(response.getDocument(), site);
+            PageDataService.saveAll(pages);
+            PageDataService.saveRelatedData(response.getPage());
+            startJoin(pages);
         }
-
-        page = response.getPage();
-        pageRepository.updateCodeAndContentById(page.getCode(), page.getContent(), page.getId());
         return new HTTPResponse(response.isResult(), response.getError());
     }
 
-    private void startJoin(Set<String> refList) {
+    private void startJoin(List<Page> pages) {
         List<SiteParser> taskList = new ArrayList<>();
-        refList.forEach(ref -> addJoin(taskList, ref));
+        pages.forEach(page -> addJoin(taskList, page));
         taskList.forEach(ForkJoinTask::join);
     }
 
-    private void addJoin(List<SiteParser> taskList, String ref) {
-        SiteParser parser = new SiteParser(new Page(site, ref));
+    private void addJoin(List<SiteParser> taskList, Page page) {
+        SiteParser parser = new SiteParser(page);
         parser.fork();
         taskList.add(parser);
     }

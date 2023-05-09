@@ -8,29 +8,38 @@ import searchengine.model.Lemma;
 import searchengine.model.Page;
 import searchengine.repositories.IndexRepository;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public abstract class IndexDataService {
 
-    public synchronized static void SaveAll(HashMap<Lemma, Integer> lemmas, Page page) {
-        List<Index> indexList = getIndexList(lemmas, page);
-        RepositoryCollector.getIndexRepository().saveAllAndFlush(indexList);
+    private static IndexRepository getRepository() {
+        return RepositoryCollector.getIndexRepository();
     }
 
-    public synchronized static void deleteByPageIn(List<Page> pages) {
-        IndexRepository indexRepository = RepositoryCollector.getIndexRepository();
-        if (pages.size() > 0) {
-            indexRepository.deleteByPageIn(pages);
+    public static void saveAll(HashMap<Lemma, Integer> lemmas, Page page) {
+        synchronized (page) {
+            Set<Index> indexList = getIndexList(lemmas, page);
+            saveAll(indexList);
         }
     }
 
-    private static List<Index> getIndexList(HashMap<Lemma, Integer> lemmas, Page page) {
-        List<Index> indexMap = new ArrayList<>();
+    public static void saveAll(Set<Index> indexList) {
+        getRepository().saveAll(indexList);
+    }
+
+    private static Set<Index> getIndexList(HashMap<Lemma, Integer> lemmas, Page page) {
+        Set<Index> indexMap = new HashSet<>();
         for (Lemma lemma : lemmas.keySet()) {
             indexMap.add(new Index(page, lemma, (float) lemmas.get(lemma)));
         }
         return indexMap;
+    }
+
+    public synchronized static void deleteByPageInAllIgnoreCase(List<Page> pageList) {
+        getRepository().deleteByPageInAllIgnoreCase(pageList);
+    }
+
+    public static List<Index> findIndexListByLemmaList(Collection<Lemma> LemmaList) {
+        return getRepository().findByLemmaInOrderByPageAscRankDesc(LemmaList);
     }
 }

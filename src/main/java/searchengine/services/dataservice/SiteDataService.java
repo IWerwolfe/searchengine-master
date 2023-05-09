@@ -9,24 +9,35 @@ import searchengine.model.Site;
 import searchengine.repositories.SiteRepository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 public abstract class SiteDataService {
 
-    public synchronized static void deleteSiteAndRelatedData(String url) {
-        SiteRepository siteRepository = RepositoryCollector.getSiteRepository();
-        Optional<Site> optionalSite = siteRepository.findByUrlIgnoreCase(url);
+    private static SiteRepository getRepository() {
+        return RepositoryCollector.getSiteRepository();
+    }
+
+    public static List<Site> getAllSite() {
+        return getRepository().findAll();
+    }
+
+    public static void deleteSiteAndRelatedData(String url) {
+        Optional<Site> optionalSite = getRepository().findByUrlIgnoreCase(url);
         if (optionalSite.isPresent()) {
             Site site = optionalSite.get();
-            LemmaDataService.deleteBySite(site);
             PageDataService.deletePageAllAndRelatedDataBySite(site);
-            siteRepository.delete(site);
+            LemmaDataService.deleteBySite(site);
+            synchronized (site) {
+                getRepository().delete(site);
+            }
         }
     }
 
-    public synchronized static void updateSite(searchengine.model.Site site, IndexStatus status, String error) {
-        SiteRepository repository = RepositoryCollector.getSiteRepository();
-        repository.updateStatusAndStatusTimeAndLastErrorById(status, LocalDateTime.now(), error, site.getId());
+    public static void updateSite(searchengine.model.Site site, IndexStatus status, String error) {
+        synchronized (site) {
+            getRepository().updateStatusAndStatusTimeAndLastErrorById(status, LocalDateTime.now(), error, site.getId());
+        }
     }
 
     public static void updateSite(searchengine.model.Site site, HTTPResponse result) {

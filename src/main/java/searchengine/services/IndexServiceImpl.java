@@ -4,16 +4,18 @@ package searchengine.services;    /*
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import searchengine.config.*;
+import searchengine.config.Site;
+import searchengine.config.SitesList;
 import searchengine.dto.RepositoryCollector;
 import searchengine.dto.index.HTTPResponse;
 import searchengine.dto.index.IndexResponse;
 import searchengine.model.IndexStatus;
-import searchengine.repositories.*;
 import searchengine.services.dataservice.SiteDataService;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 
 @Service
@@ -21,11 +23,12 @@ import java.util.concurrent.*;
 public class IndexServiceImpl implements IndexService {
 
     private final SitesList sitesList;
-    private final ForkJoinPool pool = new ForkJoinPool();
-    private final Map<searchengine.model.Site, ForkJoinTask<HTTPResponse>> tasks = new HashMap<>();
+    private ForkJoinPool pool;
+    private Map<searchengine.model.Site, ForkJoinTask<HTTPResponse>> tasks;
     private boolean isIndexing;
     private final long delay = 5000L;
     private ScheduledExecutorService service;
+    private boolean isStarted;
 
     @Override
     public IndexResponse startIndexing() {
@@ -39,6 +42,12 @@ public class IndexServiceImpl implements IndexService {
         }
 
         init();
+        isIndexing = true;
+        service.scheduleAtFixedRate(this::checkTaskList
+                , delay * 2
+                , delay
+                , TimeUnit.MILLISECONDS);
+
         parsingSite(sitesList.getSites());
         return new IndexResponse(true, "");
     }
@@ -54,6 +63,17 @@ public class IndexServiceImpl implements IndexService {
         return new IndexResponse(true, "");
     }
 
+    private void init() {
+        if (isStarted) {
+            System.out.println("Инициализация пропущена");
+            return;
+        }
+        pool = new ForkJoinPool();
+        tasks = new HashMap<>();
+        service = Executors.newSingleThreadScheduledExecutor();
+        isStarted = true;
+    }
+
     private searchengine.model.Site getDTOSite(Site site) {
         searchengine.model.Site dtoSite = new searchengine.model.Site();
         dtoSite.setName(site.getName());
@@ -61,22 +81,6 @@ public class IndexServiceImpl implements IndexService {
         dtoSite.setStatus(IndexStatus.INDEXING);
         dtoSite.setStatusTime(LocalDateTime.now());
         return dtoSite;
-    }
-
-    private void init() {
-
-        isIndexing = true;
-        service = Executors.newSingleThreadScheduledExecutor();
-        service.scheduleAtFixedRate(() -> {
-                    try {
-                        checkTaskList();
-                    } catch (ExecutionException | InterruptedException e) {
-                        System.out.println(e.getMessage());
-                    }
-                }
-                , delay * 2
-                , delay
-                , TimeUnit.MILLISECONDS);
     }
 
     private void parsingSite(List<Site> siteList) {
@@ -95,12 +99,10 @@ public class IndexServiceImpl implements IndexService {
         }
     }
 
-    private void checkTaskList() throws ExecutionException, InterruptedException {
+    private void checkTaskList() {
 
-        if (tasks.size() == 0) {
-            isIndexing = false;
-            System.out.println("!!! = OK");
-            service.shutdown();
+        if (isCompleteTask()) {
+            return;
         }
 
         for (searchengine.model.Site site : tasks.keySet()) {
@@ -112,9 +114,24 @@ public class IndexServiceImpl implements IndexService {
                 continue;
             }
 
-            System.out.println("complete: " + site.getName() + " " + task.get().getError());
-            SiteDataService.updateSite(site, task.get());
+            try {
+                HTTPResponse response = task.get();
+                System.out.println("Site '" + site.getName() + "' completed. Error: " + response.getError());
+                SiteDataService.updateSite(site, response);
+            } catch (InterruptedException | ExecutionException e) {
+                SiteDataService.updateSite(site, IndexStatus.FAILED, e.getMessage());
+                System.out.println("Error: " + e.getMessage());
+            }
             tasks.remove(site);
         }
+    }
+
+    private boolean isCompleteTask() {
+        if (tasks.isEmpty()) {
+            isIndexing = false;
+            System.out.println("All tasks completed.");
+            service.shutdown();
+        }
+        return !isIndexing;
     }
 }

@@ -4,7 +4,6 @@ package searchengine.dto;    /*
 
 import lombok.Data;
 import searchengine.config.SiteConnection;
-import searchengine.config.SitesList;
 
 @Data
 public abstract class AppSettingCollector {

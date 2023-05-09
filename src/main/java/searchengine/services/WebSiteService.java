@@ -1,5 +1,5 @@
 package searchengine.services;    /*
- *created by WerWolfe on PageService
+ *created by WerWolfe on WebSiteService
  */
 
 import org.jsoup.HttpStatusException;
@@ -9,21 +9,27 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import searchengine.config.SiteConnection;
 import searchengine.dto.AppSettingCollector;
+import searchengine.dto.RepositoryCollector;
 import searchengine.dto.index.PageServiceResponse;
+import searchengine.dto.index.PageSet;
 import searchengine.model.Page;
 import searchengine.model.Site;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 
 import static java.lang.Thread.sleep;
 
-public abstract class PageService {
+public abstract class WebSiteService {
 
-    private static String regexPath = "^\\/.*";
-    private static String regexMask = "https?://(?:www\\.|)";
-    private static String regexFile = ".*\\.([a-zA-Z0-1]{1,4})[^\bphp|html\b]$";
+    static final ConcurrentHashMap<Site, PageSet> cacheUrls = new ConcurrentHashMap<>();
+    private static final String regexPath = "^\\/.*";
+    private static final String regexUrl = "^(https?://)?[^/]+";
+    private static final String regexFile = ".*\\.([a-zA-Z0-1]{1,4})[^\bphp|html\b]$";
 
     public static Document getHTMLPage(String url) throws InterruptedException, IOException {
 
@@ -34,6 +40,7 @@ public abstract class PageService {
 
         sleep((long) ((Math.random() * 2000) + (1000 * Math.random()) + 400));
         return Jsoup.connect(url)
+                .timeout(5000)
                 .userAgent(setting.getUserAgent())
                 .referrer(setting.getReferrer())
                 .get();
@@ -41,6 +48,10 @@ public abstract class PageService {
 
     public static Document getHTMLPage(Page page) throws InterruptedException, IOException {
         return getHTMLPage(getAbsolutePath(page));
+    }
+
+    public static Elements clearDocumentAtFooterAndButton(Document document) {
+        return document.body().select(":not([class*=footer]):not([class*=btn]):not([class*=button]):not([class*=header])");
     }
 
     public static PageServiceResponse getPage(Page page) {
@@ -56,20 +67,48 @@ public abstract class PageService {
     }
 
     public static PageServiceResponse getPage(String url, Site site) {
-        return getPage(new Page(site, url));
+        return getPage(new Page(site, getUrl(url)));
     }
 
-    public static Set<String> getRef(Document document, String regex) {
+    public static HashSet<String> getUrlFromPage(Document document, String regex) {
         HashSet<String> refList = new HashSet<>();
         Elements elements = document.select("a[href]");
         elements.forEach(hrefObject -> addRef(hrefObject, regex, refList));
         return refList;
     }
 
+    public static List<Page> getPages(Document document, Site site) {
+
+        HashSet<String> urls = getUrlFromPage(document, getDomainRegex(site));
+        delCachedUrls(urls, site);
+        List<Page> urlToBD = RepositoryCollector.getPageRepository().findBySiteAndPathInOrderByPathAsc(site, urls);
+        urlToBD.forEach(page -> urls.remove(page.getPath()));
+
+        List<Page> pages = new ArrayList<>();
+        urls.forEach(url -> {
+            pages.add(new Page(site, url));
+            cacheUrls.get(site).addUrl(url);
+        });
+        return pages;
+    }
+
+    public static void delCachedUrls(HashSet<String> urls, Site site) {
+        ConcurrentSkipListSet<String> cache = cacheUrls.get(site).getUrls();
+        cache.forEach(urls::remove);
+    }
+
+    public static void delUrlByCache(Site site, String url) {
+        cacheUrls.get(site).remoteUrl(url);
+    }
+
+    public static void delUrlByCache(Page page) {
+        cacheUrls.get(page.getSite()).remoteUrl(page.getPath());
+    }
+
     private static void addRef(Element hrefObject, String regex, HashSet<String> refList) {
         String href = hrefObject.attr("href").trim();
         if (href.matches(regex) && !href.matches(regexFile)) {
-            refList.add(href);
+            refList.add(getUrl(href));
         }
     }
 
@@ -81,8 +120,8 @@ public abstract class PageService {
         return siteName + path + "/";
     }
 
-    public static String getUrl(String href, Site site) {
-        href = href.replaceAll(regexMask + getDomainName(site), "");
+    public static String getUrl(String href) {
+        href = href.replaceAll(regexUrl, "");
         if (href.length() == 0) {
             return "/";
         }
@@ -109,5 +148,9 @@ public abstract class PageService {
 
     public static String getDomainRegex(Site site) {
         return getDomainRegex(site.getUrl());
+    }
+
+    public static void initCache(Site site) {
+        cacheUrls.put(site, new PageSet());
     }
 }

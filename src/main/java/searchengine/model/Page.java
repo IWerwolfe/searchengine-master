@@ -2,8 +2,12 @@ package searchengine.model;    /*
  *created by WerWolfe on Page
  */
 
-import lombok.*;
-import searchengine.services.PageService;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import searchengine.services.WebSiteService;
+
 import javax.persistence.*;
 
 @Entity
@@ -17,7 +21,7 @@ public class Page {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "site_id")
     private Site site;
     private String path;
@@ -36,17 +40,17 @@ public class Page {
     }
 
     public Page(Site site) {
-        this(site, site.getUrl());
+        this(site, WebSiteService.getUrl(site.getUrl()));
     }
 
     public Page(Site site, String path) {
         this.site = site;
-        this.path = PageService.getUrl(path, site);
+        this.path = path;
     }
 
     @Override
     public String toString() {
         String separator = "; ";
-        return "Page: " + path + separator + "site: " + site.getUrl() + separator + "code: " + code;
+        return "Page: " + path;
     }
 }
