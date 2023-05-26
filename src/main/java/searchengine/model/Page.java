@@ -50,7 +50,6 @@ public class Page {
 
     @Override
     public String toString() {
-        String separator = "; ";
         return "Page: " + path;
     }
 }

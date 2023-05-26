@@ -18,7 +18,7 @@ public class SearchResult implements Comparable<SearchResult> {
         if (o == null) {
             return -1;
         }
-        return -absoluteRelevance.compareTo(o.absoluteRelevance);
+        return -Float.compare(this.absoluteRelevance, o.absoluteRelevance);
     }
 
     @Override

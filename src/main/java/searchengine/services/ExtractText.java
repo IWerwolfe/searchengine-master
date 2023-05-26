@@ -5,8 +5,10 @@ package searchengine.services;    /*
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -15,41 +17,38 @@ import java.util.List;
 
 @Getter
 @Setter
+@Component
+@Slf4j
 public class ExtractText {
 
-    private static String regexHTMLTag = "(\\<.*?\\>)";
-    private static String regexNonWordCharacter = "[^а-яА-ЯёЁ\s]";
-    private static String regexNonWord = ".*(СОЮЗ|МЕЖД|ПРЕДЛ|ЧАСТ|ПРЕДК)\s?.*|.*\sМС(-|\s).*";
-    private static String regexSplit = "[\s\r\n]+";
-    private static final String regexDelEndWord = "(а|я|о|е|ь|ы|и|а|ая|ое|ой|ые|ие|ый|ий|ать|ять|оть|еть|уть|у|ю|ем|им|ешь|ишь|ете|ите|ет|ит|ут|ют|ят|ал|ял|ала|яла|али|яли|ол|ел|ола|ела|оли|ели|ул|ула|ули)$";
-    private static LuceneMorphology luceneMorph;
-    private static HashSet<String> nonCheckWord;
+    private final String regexHTMLTag = "(\\<.*?\\>)";
+    private final String regexNonWordCharacter = "[^а-яА-ЯёЁ\s]";
+    private final String regexNonWord = ".*(СОЮЗ|МЕЖД|ПРЕДЛ|ЧАСТ|ПРЕДК)\s?.*|.*\sМС(-|\s).*";
+    private final String regexSplit = "[\s\r\n]+";
+    private final String regexDelEndWord = "(а|я|о|е|ь|ы|и|а|ая|ое|ой|ые|ие|ый|ий|у|ю|ем|им|ет|ит|ут|ют|ят|ал|ял|ол|ел|ул)$";
+    private final String regexDelEndWordGo = "(ать|ять|оть|еть|уть|ешь|ишь|ете|ите|ала|яла|али|яли|ола|ела|оли|ели|ула|ули)$";
+    private LuceneMorphology luceneMorph;
+    private HashSet<String> nonCheckWord;
 
-    public synchronized static void init() throws IOException {
-        if (luceneMorph == null) {
+    public ExtractText() {
+        try {
             luceneMorph = new RussianLuceneMorphology();
             nonCheckWord = new HashSet<>();
+        } catch (IOException e) {
+            log.error(e.getMessage());
         }
     }
 
-    public static String clearText(@NonNull String string) {
+    public String clearText(@NonNull String string) {
         String text = string.replaceAll(regexHTMLTag, " ");
         return text.replaceAll(regexNonWordCharacter, " ").trim();
     }
 
-    public static String[] getStrings(@NonNull String string) {
+    public String[] getStrings(@NonNull String string) {
         return string.trim().split(regexSplit);
     }
 
-    public static HashMap<String, Integer> getWords(@NonNull String text) {
-
-        if (luceneMorph == null) {
-            try {
-                init();
-            } catch (IOException e) {
-                return new HashMap<>();
-            }
-        }
+    public HashMap<String, Integer> getWords(@NonNull String text) {
 
         String[] strings = getStrings(clearText(text));
         HashMap<String, Integer> words = new HashMap<>();
@@ -66,11 +65,12 @@ public class ExtractText {
         return words;
     }
 
-    public static String delEndWord(String word) {
-        return word.replaceAll(regexDelEndWord, "");
+    public String delEndWord(String word) {
+        String clearWord = word.replaceAll(regexDelEndWord, "");
+        return word.length() < 5 ? clearWord : clearWord.replaceAll(regexDelEndWordGo, "");
     }
 
-    private static boolean checkWord(String word) {
+    private boolean checkWord(String word) {
         if (word.isEmpty()) {
             return false;
         }
@@ -87,7 +87,7 @@ public class ExtractText {
         return true;
     }
 
-    private static boolean isNonWord(String word) {
+    private boolean isNonWord(String word) {
         return word.matches(regexNonWord);
     }
 }

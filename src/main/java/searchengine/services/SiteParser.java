@@ -4,11 +4,11 @@ package searchengine.services;    /*
 
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.stereotype.Component;
 import searchengine.dto.index.HTTPResponse;
 import searchengine.dto.index.PageServiceResponse;
 import searchengine.model.Page;
 import searchengine.model.Site;
-import searchengine.services.dataservice.PageDataService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +17,7 @@ import java.util.concurrent.RecursiveTask;
 
 @Getter
 @Setter
+@Component
 public class SiteParser extends RecursiveTask<HTTPResponse> {
 
     private static boolean stop;
@@ -25,24 +26,24 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
     private long start;
     private static long count;
     private long number;
+    private IndexServiceImpl parent;
 
-    public SiteParser(Page page) {
-        this.page = page;
-        this.site = page.getSite();
-        init();
+    public SiteParser(IndexServiceImpl parent) {
+        this.parent = parent;
+        start = System.currentTimeMillis();
+        number = count++;
     }
 
-    public SiteParser(Site site) {
+    public void setPage(Page page) {
+        this.page = page;
+        this.site = page.getSite();
+    }
+
+    public void setSite(Site site) {
         this.page = new Page(site);
         this.site = site;
         WebSiteService.initCache(site);
-        PageDataService.save(page);
-        init();
-    }
-
-    private void init() {
-        start = System.currentTimeMillis();
-        number = count++;
+        parent.getPageRepository().save(page);
     }
 
     @Override
@@ -52,14 +53,14 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
             return new HTTPResponse(false, "Индексация остановлена пользователем");
         }
 
-        WebSiteService.delUrlByCache(page);
-        PageServiceResponse response = WebSiteService.getPage(page);
-        PageDataService.update(response.getPage());
+        parent.getWebSiteService().delUrlByCache(page);
+        PageServiceResponse response = parent.getWebSiteService().getPage(page);
+        parent.getPageRepository().updateCodeAndContentById(page.getCode(), page.getContent(), page.getId());
 
         if (response.isResult()) {
-            List<Page> pages = WebSiteService.getPages(response.getDocument(), site);
-            PageDataService.saveAll(pages);
-            PageDataService.saveRelatedData(response.getPage());
+            List<Page> pages = parent.getWebSiteService().getPages(response.getDocument(), site);
+            parent.getPageRepository().saveAllAndFlush(pages);
+            parent.saveRelatedData(response.getPage());
             startJoin(pages);
         }
         return new HTTPResponse(response.isResult(), response.getError());
@@ -72,7 +73,8 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
     }
 
     private void addJoin(List<SiteParser> taskList, Page page) {
-        SiteParser parser = new SiteParser(page);
+        SiteParser parser = new SiteParser(parent);
+        parser.setPage(page);
         parser.fork();
         taskList.add(parser);
     }

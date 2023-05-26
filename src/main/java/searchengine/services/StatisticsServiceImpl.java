@@ -8,9 +8,9 @@ import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
 import searchengine.model.Site;
-import searchengine.services.dataservice.LemmaDataService;
-import searchengine.services.dataservice.PageDataService;
-import searchengine.services.dataservice.SiteDataService;
+import searchengine.repositories.LemmaRepository;
+import searchengine.repositories.PageRepository;
+import searchengine.repositories.SiteRepository;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -23,6 +23,9 @@ public class StatisticsServiceImpl implements StatisticsService {
     private final SitesList sites;
     private TotalStatistics total;
     private List<DetailedStatisticsItem> detailed;
+    private final SiteRepository siteRepository;
+    private final LemmaRepository lemmaRepository;
+    private final PageRepository pageRepository;
 
     @Override
     public StatisticsResponse getStatistics() {
@@ -30,7 +33,8 @@ public class StatisticsServiceImpl implements StatisticsService {
         total = new TotalStatistics();
         detailed = new ArrayList<>();
 
-        List<searchengine.model.Site> sitesListBD = SiteDataService.getAllSite();
+        List<searchengine.model.Site> sitesListBD = siteRepository.findAll();
+        ;
         List<searchengine.config.Site> resultList = getNonIndexedSite(sitesListBD);
 
         total.setSites(sites.getSites().size());
@@ -64,8 +68,8 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setName(site.getName());
             item.setUrl(site.getUrl());
 
-            int pages = (int) PageDataService.getCountBySite(site);
-            int lemmas = (int) LemmaDataService.getCountBySite(site);
+            int pages = (int) pageRepository.countBySite(site);
+            int lemmas = (int) lemmaRepository.countBySite(site);
 
             item.setPages(pages);
             item.setLemmas(lemmas);

@@ -27,6 +27,5 @@ public class PageServiceResponse {
 
     public PageServiceResponse(Page page, String error) {
         this(false, page, error, null);
-        System.out.println("Пропущено: " + page.getPath());
     }
 }
