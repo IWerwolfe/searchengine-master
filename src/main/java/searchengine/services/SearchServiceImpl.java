@@ -147,7 +147,7 @@ public class SearchServiceImpl implements SearchService {
         List<Lemma> newLemmaList = new ArrayList<>();
 
         for (Lemma lemma : lemmaList) {
-            if ((double) lemma.getFrequency() / pageRepository.countBySite(lemma.getSite()) < 0.7) {
+            if ((double) lemma.getFrequency() / pageRepository.countBySite(lemma.getSite()) < 0.8) {
                 newLemmaList.add(lemma);
             } else {
                 log.info("Remove lemma: {}", lemma.getLemma());

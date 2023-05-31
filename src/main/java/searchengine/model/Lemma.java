@@ -14,6 +14,7 @@ import javax.persistence.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"site_id", "lemma"}))
 public class Lemma {
 
     @Id
@@ -26,9 +27,13 @@ public class Lemma {
     private String lemma;
     private Integer frequency;
 
-    public Lemma(Site site, String lemma, Integer frequency) {
+    public Lemma(Site site, String word) {
         this.site = site;
-        this.lemma = lemma;
-        this.frequency = frequency;
+        this.lemma = word;
+        this.frequency = 0;
+    }
+
+    public void incrementFrequency() {
+        this.frequency++;
     }
 }

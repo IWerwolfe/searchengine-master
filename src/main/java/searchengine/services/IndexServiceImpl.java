@@ -31,18 +31,17 @@ import java.util.concurrent.*;
 public class IndexServiceImpl implements IndexService {
 
     private final SitesList sitesList;
-    private ForkJoinPool pool;
-    private Map<searchengine.model.Site, ForkJoinTask<HTTPResponse>> tasks;
+    private ForkJoinPool forkJoinPool;
+    private ConcurrentHashMap<searchengine.model.Site, ForkJoinTask<HTTPResponse>> scheduledTasks;
     private boolean isIndexing;
     private final long delay = 5000L;
-    private ScheduledExecutorService service;
-    private boolean isStarted;
     private final WebSiteService webSiteService;
     private final SiteRepository siteRepository;
     private final LemmaRepository lemmaRepository;
     private final PageRepository pageRepository;
     private final IndexRepository indexRepository;
     private final ExtractText extractText;
+    private ScheduledExecutorService executorService;
 
     @Override
     public IndexResponse startIndexing() {
@@ -56,24 +55,19 @@ public class IndexServiceImpl implements IndexService {
         }
 
         init();
-        isIndexing = true;
-        service.scheduleAtFixedRate(this::checkTaskList
-                , delay * 2
-                , delay
-                , TimeUnit.MILLISECONDS);
-
         parsingSite(sitesList.getSites());
         return new IndexResponse(true, "");
     }
 
     @Override
-    public IndexResponse stopIndexing() {
+    public IndexResponse stopIndexing() throws InterruptedException {
 
         if (!isIndexing) {
             return new IndexResponse(false, "Индексация не запущена");
         }
         SiteParser.stop();
-        isIndexing = false;
+        Thread.sleep(delay * 3);
+        stopThread();
         return new IndexResponse(true, "");
     }
 
@@ -106,14 +100,14 @@ public class IndexServiceImpl implements IndexService {
     }
 
     private void init() {
-        if (isStarted) {
-            log.info("Инициализация пропущена");
-            return;
-        }
-        pool = new ForkJoinPool();
-        tasks = new HashMap<>();
-        service = Executors.newSingleThreadScheduledExecutor();
-        isStarted = true;
+        forkJoinPool = new ForkJoinPool();
+        scheduledTasks = new ConcurrentHashMap<>();
+        isIndexing = true;
+        executorService = Executors.newSingleThreadScheduledExecutor();
+        executorService.scheduleAtFixedRate(this::checkTaskList
+                , delay * 2
+                , delay
+                , TimeUnit.MILLISECONDS);
     }
 
     private String convertUrl(String url) {
@@ -173,7 +167,7 @@ public class IndexServiceImpl implements IndexService {
             try {
                 SiteParser siteParser = new SiteParser(this);
                 siteParser.setSite(dtoSite);
-                tasks.put(dtoSite, pool.submit(siteParser));
+                scheduledTasks.put(dtoSite, forkJoinPool.submit(siteParser));
             } catch (Exception e) {
                 updateSite(dtoSite, e);
             }
@@ -186,9 +180,9 @@ public class IndexServiceImpl implements IndexService {
             return;
         }
 
-        for (searchengine.model.Site site : tasks.keySet()) {
+        for (searchengine.model.Site site : scheduledTasks.keySet()) {
 
-            ForkJoinTask<HTTPResponse> task = tasks.get(site);
+            ForkJoinTask<HTTPResponse> task = scheduledTasks.get(site);
 
             if (!task.isDone()) {
                 updateSite(site);
@@ -197,23 +191,30 @@ public class IndexServiceImpl implements IndexService {
 
             try {
                 HTTPResponse response = task.get();
-                log.info("Site '{}' completed. Error: {}", site.getName(), response.getError());
+                log.info("Site '{}' completed. {}",
+                        site.getName(),
+                        response.getError().isEmpty() ? "No errors" : "Error: " + response.getError());
                 updateSite(site, response);
             } catch (InterruptedException | ExecutionException e) {
                 updateSite(site, IndexStatus.FAILED, e.getMessage());
                 log.error("Error: {}", e.getMessage());
             }
-            tasks.remove(site);
+            scheduledTasks.remove(site);
         }
     }
 
     private boolean isCompleteTask() {
-        if (tasks.isEmpty()) {
-            isIndexing = false;
-            log.info("All tasks completed.");
-            service.shutdown();
+        if (scheduledTasks.isEmpty()) {
+            stopThread();
         }
         return !isIndexing;
+    }
+
+    private void stopThread() {
+        isIndexing = false;
+        log.info("All tasks completed.");
+        forkJoinPool.shutdown();
+        executorService.shutdown();
     }
 
     private void deleteSiteAndRelatedData(String url) {
@@ -222,7 +223,6 @@ public class IndexServiceImpl implements IndexService {
             searchengine.model.Site site = optionalSite.get();
             deletePageAllAndRelatedData(site);
             lemmaRepository.deleteBySite(site);
-            ;
             siteRepository.delete(site);
         }
     }
@@ -250,7 +250,9 @@ public class IndexServiceImpl implements IndexService {
     }
 
     private void updateSite(searchengine.model.Site site, IndexStatus status, String error) {
-        siteRepository.updateStatusAndStatusTimeAndLastErrorById(status, LocalDateTime.now(), error, site.getId());
+        synchronized (siteRepository) {
+            siteRepository.updateStatusAndStatusTimeAndLastErrorById(status, LocalDateTime.now(), error, site.getId());
+        }
     }
 
     private void updateSite(searchengine.model.Site site, HTTPResponse result) {
@@ -273,9 +275,11 @@ public class IndexServiceImpl implements IndexService {
     public void saveRelatedData(Page page) {
         String text = Jsoup.parse(page.getContent()).text();
         HashMap<String, Integer> words = extractText.getWords(text);
-        HashMap<Lemma, Integer> lemmaList = saveAllLemma(words, page.getSite());
+        HashMap<Lemma, Integer> lemmaList = saveOrUpdateLemmList(words, page.getSite());
         Set<Index> indexList = getIndexList(lemmaList, page);
-        indexRepository.saveAll(indexList);
+        synchronized (indexRepository) {
+            indexRepository.saveAllAndFlush(indexList);
+        }
     }
 
     private Set<Index> getIndexList(HashMap<Lemma, Integer> lemmas, Page page) {
@@ -286,38 +290,17 @@ public class IndexServiceImpl implements IndexService {
         return indexMap;
     }
 
-    public HashMap<Lemma, Integer> saveAllLemma(HashMap<String, Integer> words, searchengine.model.Site site) {
-
-        HashMap<String, Lemma> toSave = new HashMap<>();
+    public HashMap<Lemma, Integer> saveOrUpdateLemmList(HashMap<String, Integer> words, searchengine.model.Site site) {
         HashMap<Lemma, Integer> lemmaList = new HashMap<>();
-
-        if (words.isEmpty()) {
-            return lemmaList;
-        }
-
-        synchronized (site) {
-            List<Lemma> lemmasToBD = lemmaRepository.findBySiteAndLemmaIn(site, words.keySet());
-            lemmasToBD.forEach(l -> toSave.put(l.getLemma(), l));
-
-            for (String word : words.keySet()) {
-                Lemma lemma = createOrUpdateLemmaFrequency(toSave, word, site);
-                lemmaList.put(lemma, words.get(word));
+        for (String word : words.keySet()) {
+            synchronized (lemmaRepository) {
+                Optional<Lemma> optional = lemmaRepository.findBySiteAndLemma(site, word);
+                Lemma lemma = optional.orElseGet(() -> new Lemma(site, word));
+                lemma.incrementFrequency();
+                lemmaList.put(lemmaRepository.save(lemma), words.get(word));
             }
         }
-
-        lemmaRepository.saveAll(toSave.values());
         return lemmaList;
-    }
-
-    private Lemma createOrUpdateLemmaFrequency(HashMap<String, Lemma> toSave, String word, searchengine.model.Site site) {
-        Lemma lemma = toSave.get(word);
-        if (lemma == null) {
-            lemma = new Lemma(site, word, 1);
-            toSave.put(word, lemma);
-        } else {
-            lemma.setFrequency(lemma.getFrequency() + 1);
-        }
-        return lemma;
     }
 
     public PageRepository getPageRepository() {

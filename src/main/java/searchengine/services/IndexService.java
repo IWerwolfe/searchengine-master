@@ -7,7 +7,8 @@ import searchengine.dto.index.IndexResponse;
 public interface IndexService {
 
     IndexResponse startIndexing();
-    IndexResponse stopIndexing();
+
+    IndexResponse stopIndexing() throws InterruptedException;
 
     IndexResponse startIndexingPage(String url);
 

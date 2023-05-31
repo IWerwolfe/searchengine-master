@@ -1,7 +1,7 @@
 package searchengine.controllers;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import searchengine.dto.index.IndexResponse;
@@ -15,18 +15,12 @@ import searchengine.services.StatisticsService;
 @RestController
 @RequestMapping("/api")
 @Slf4j
+@RequiredArgsConstructor
 public class ApiController {
 
     private final StatisticsService statisticsService;
     private final SearchService searchService;
     private final IndexService indexService;
-
-    @Autowired
-    public ApiController(StatisticsService statisticsService, SearchService searchService, IndexService indexService) {
-        this.statisticsService = statisticsService;
-        this.searchService = searchService;
-        this.indexService = indexService;
-    }
 
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
@@ -40,7 +34,7 @@ public class ApiController {
     }
 
     @GetMapping("/stopIndexing")
-    public ResponseEntity<IndexResponse> stopIndexing() {
+    public ResponseEntity<IndexResponse> stopIndexing() throws InterruptedException {
         log.info("indexing stopped");
         return ResponseEntity.ok(indexService.stopIndexing());
     }

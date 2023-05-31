@@ -58,9 +58,11 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
         parent.getPageRepository().updateCodeAndContentById(page.getCode(), page.getContent(), page.getId());
 
         if (response.isResult()) {
+            parent.saveRelatedData(page);
             List<Page> pages = parent.getWebSiteService().getPages(response.getDocument(), site);
-            parent.getPageRepository().saveAllAndFlush(pages);
-            parent.saveRelatedData(response.getPage());
+            synchronized (parent.getPageRepository()) {
+                parent.getPageRepository().saveAllAndFlush(pages);
+            }
             startJoin(pages);
         }
         return new HTTPResponse(response.isResult(), response.getError());
@@ -77,10 +79,6 @@ public class SiteParser extends RecursiveTask<HTTPResponse> {
         parser.setPage(page);
         parser.fork();
         taskList.add(parser);
-    }
-
-    public static boolean isStop() {
-        return stop;
     }
 
     public static void stop() {

@@ -51,10 +51,6 @@ public class WebSiteService {
         return getHTMLPage(getAbsolutePath(page));
     }
 
-    public Elements clearDocumentAtFooterAndButton(Document document) {
-        return document.body().select(":not([class*=footer]):not([class*=btn]):not([class*=button]):not([class*=header])");
-    }
-
     public PageServiceResponse getPage(Page page) {
         try {
             Document document = getHTMLPage(page);
