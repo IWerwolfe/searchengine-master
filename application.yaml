@@ -19,12 +19,12 @@ indexing-settings:
     #      name: Кассаком
     #    - url: https://www.lenta.ru
     #      name: Лента.ру
-    - url: https://www.svetlovka.ru
-      name: svetlovka
-#    - url: http://radiomv.ru
-#      name: radiomv
-#    - url: https://www.skillbox.ru
-#      name: Skillbox
+    #    - url: https://www.svetlovka.ru
+    #      name: svetlovka
+    #    - url: http://radiomv.ru
+    #      name: radiomv
+    - url: https://www.skillbox.ru
+      name: Skillbox
 #    - url: https://www.playback.ru
 #      name: PlayBack.Ru
 site-connection:

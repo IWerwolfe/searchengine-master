@@ -39,7 +39,7 @@ public class WebSiteService {
 
     public Document getHTMLPage(String url) throws InterruptedException, IOException {
 
-        sleep((long) ((Math.random() * 2000) + (1000 * Math.random()) + 400));
+        sleep((long) ((Math.random() * 1000) + (500 * Math.random()) + 400));
         return Jsoup.connect(url)
                 .timeout(5000)
                 .userAgent(siteConnection.getUserAgent())

@@ -211,10 +211,15 @@ public class IndexServiceImpl implements IndexService {
     }
 
     private void stopThread() {
+
         isIndexing = false;
-        log.info("All tasks completed.");
         forkJoinPool.shutdown();
         executorService.shutdown();
+
+        for (searchengine.model.Site site : scheduledTasks.keySet()) {
+            updateSite(site, IndexStatus.FAILED, "Индексация остановлена пользователем");
+            log.info("Индексация сайта {} остановлена пользователем", site.getName());
+        }
     }
 
     private void deleteSiteAndRelatedData(String url) {
