@@ -26,7 +26,7 @@ public class Page {
     private Site site;
     private String path;
     private Integer code;
-    @Column(columnDefinition = "MEDIUMTEXT")
+    @Column(columnDefinition = "MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
     private String content;
 
     public Page(Site site, String path, Integer code, String content) {

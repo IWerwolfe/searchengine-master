@@ -15,10 +15,10 @@ spring:
     show-sql: false
 indexing-settings:
   sites:
-    - url: https://www.kassakom.ru
-      name: Кассаком
-#    - url: https://www.lenta.ru
-#      name: Лента.ру
+#    - url: https://www.kassakom.ru
+    #      name: Кассаком
+    #    - url: https://www.lenta.ru
+    #      name: Лента.ру
     - url: https://www.svetlovka.ru
       name: svetlovka
 #    - url: http://radiomv.ru

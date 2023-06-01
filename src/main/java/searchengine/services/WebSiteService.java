@@ -110,7 +110,7 @@ public class WebSiteService {
         String path = page.getPath();
         boolean isConcat = !site.getUrl().matches(regexPath) && !path.matches(regexPath);
         String siteName = isConcat ? site.getUrl().concat("/") : site.getUrl();
-        return siteName + path + "/";
+        return siteName + (path.equals("/") ? "" : path) + "/";
     }
 
     public static String getUrl(String href) {

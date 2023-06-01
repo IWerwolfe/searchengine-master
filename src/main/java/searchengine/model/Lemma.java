@@ -14,7 +14,6 @@ import javax.persistence.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"site_id", "lemma"}))
 public class Lemma {
 
     @Id
