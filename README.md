@@ -9,7 +9,8 @@
 
 В application.yml находятся конфигурируемые параметры нашего приложения:   
 
-`spring:   
+```java
+spring:   
   datasource:    
     username: [ логин для подключения к БД ]   
     password: [ пароль ]   
@@ -19,7 +20,8 @@ indexing-settings:
     - url: https://[ адрес сайта 1 ]  
       name: [ имя сайта 1 ]     
     - url: https://[ адрес сайта 2 ]   
-      name: [ имя сайта 2 ]    `
+      name: [ имя сайта 2 ]
+```
 
 ## Использование
 
